@@ -7,6 +7,9 @@ using System;
 [RequireComponent(typeof(MapScript))]
 public class UserInterface : MonoBehaviour
 {
+    public static UserInterface Instance;
+
+    public Material higlightLocationMaterial;
     public GameObject buttonsPanel;
     public GameObject searchingPanel;
     public Image infoPanel;
@@ -18,6 +21,19 @@ public class UserInterface : MonoBehaviour
      new position of the Camera. Locations are stored as lists of floats since we already implemented
      simmilar storing system in SaveScript.*/
     private Dictionary<string, List<float>> locationsPositions;
+
+    private bool locationInfoDisplayed;
+
+    private Location locationUnderCursor;
+
+    private void Awake()
+    {
+        if (Instance == null) {
+            Instance = this;
+        } else {
+            Destroy(gameObject);
+        }
+    }
 
     private Dictionary<string, List<float>> CreateLocationsTable()
     {
@@ -42,17 +58,61 @@ public class UserInterface : MonoBehaviour
     public void SetLocationInfo(Location location) {
 
         locationName.text = location.locationName;
-        house.text = location.house.ToString();
-        owner.text = location.owner.ToString();
+        house.text = location.house;
+        owner.text = location.owner;
 
         if (location.GetComponent<PopulatedPlace>()) {
             population.text = location.GetComponent<PopulatedPlace>().population.ToString();
-            chief.text = location.GetComponent<PopulatedPlace>().chief.ToString();
+            chief.text = location.GetComponent<PopulatedPlace>().chief;
         }
 
         if (location.GetComponent<Fortress>())
         {
             garrison.text = location.GetComponent<Fortress>().garrison.ToString();
+        }
+    }
+
+    private void Update()
+    {
+        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        RaycastHit hit;
+
+        if (Physics.Raycast(ray, out hit))
+        {
+            Location hitLocation = hit.collider.GetComponent<Location>();
+
+            if (CameraController.Instance.locationsVisible && hitLocation) {
+                locationUnderCursor = hitLocation;
+
+                if (!locationUnderCursor.locationHiglighted) {
+                    locationUnderCursor.HiglightLocationObjects(true);
+                }
+            } else if (locationUnderCursor != null) {
+                locationUnderCursor.HiglightLocationObjects(false);
+                locationUnderCursor = null;
+            }
+        }
+
+        if (Input.GetMouseButtonDown(0))
+        {
+            if (Physics.Raycast(ray, out hit))
+            {
+                Location location = hit.collider.GetComponent<Location>();
+
+                if (location && CameraController.Instance.locationsVisible)
+                {
+                    if (!locationInfoDisplayed)
+                    {
+                        locationInfoDisplayed = true;
+                        SetLocationInfo(location);
+                    }
+                }
+                else if (infoPanel)
+                {
+                    locationInfoDisplayed = false;
+                }
+            }
+            UpdateInfoPanel(locationInfoDisplayed);
         }
     }
 

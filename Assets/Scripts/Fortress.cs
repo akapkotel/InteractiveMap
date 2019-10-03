@@ -8,10 +8,9 @@ public class Fortress : Location
     public MapScript.Fortresses fortressType;
     public int garrison;
 
-    // Start is called before the first frame update
     void Start()
     {
-        this.name = locationName;
+        name = locationName;
         garrison = FindObjectOfType<MapScript>().garrisonsSizes[fortressType];
     }
 }

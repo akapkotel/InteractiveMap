@@ -55,8 +55,8 @@ public class ObjectsSpawner : MonoBehaviour
     /// <returns>Vector3</returns>
     public Vector3 GetOneRandomPositionOnMap()
     {
-        int posx = Random.Range(mapMargin, mapSize - mapMargin);
-        int posz = Random.Range(mapMargin, mapSize - mapMargin);
+        int posx = Random.Range(100, 11900);
+        int posz = Random.Range(100, 11900);
 
         int currentTerrainIndex = MapScript.Instance.GetTerrainForCoordinates(posx, posz);
 

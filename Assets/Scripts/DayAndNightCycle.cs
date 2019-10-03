@@ -27,7 +27,7 @@ public class DayAndNightCycle : ScheduledScript
 
     public enum DayCycle { Day, Night };
 
-    private DayCycle dayCycle;
+    public DayCycle dayCycle;
 
     private float lastCycleChangeTime;
 

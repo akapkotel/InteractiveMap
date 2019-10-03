@@ -7,7 +7,4 @@ public class PopulatedPlace : Location
     public int population;
     public string chief;
     // Start is called before the first frame update
-    void Start() {
-              
-    }
 }

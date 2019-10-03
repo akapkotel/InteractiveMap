@@ -13,7 +13,6 @@ public class Village: PopulatedPlace
 
     void Awake()
     {
-        //mapScript = FindObjectOfType<MapScript>();
         size = RandomVillageWealth();
         population = (3+(int)size) * UnityEngine.Random.Range(45, 65);
         gameObject.layer = 8;
@@ -24,11 +23,14 @@ public class Village: PopulatedPlace
 
         PlaceFields();
 
-        //RegisterInMapVillagesList();
-
-        //RegisterInCameraLocationsList();
-
         SetSphereCollider();
+
+        MoveSelectionMarketToEndOfHierarchy();
+    }
+
+    private void MoveSelectionMarketToEndOfHierarchy()
+    {
+        transform.GetChild(0).SetAsLastSibling();
     }
 
     private void SetSphereCollider()
@@ -133,15 +135,5 @@ public class Village: PopulatedPlace
                 newObject.transform.rotation = AlignToGround.Align(newObject.transform);
             }
         }
-    }
-
-    void RegisterInMapVillagesList()
-    {
-        MapScript.Instance.RegisterInVillagesList(this); // required for later for user to be able to search particular Village
-    }
-
-    void RegisterInCameraLocationsList()
-    {
-       CameraController.Instance.RegisterInCameraLocationsList(this);
     }
 }

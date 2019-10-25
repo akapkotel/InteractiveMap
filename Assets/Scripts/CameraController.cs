@@ -1,83 +1,103 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class CameraController : MonoBehaviour
 {
-    public static CameraController Instance;
+    public static CameraController Instance { get; private set; }
+
+    public static Camera UserCamera { get; private set; }
+
+    private bool LocationsVisible { get; set; }
 
     public Light[] ignoredLights;
 
-    [Tooltip("How fast should camera move around the map?")] public float cameraMoveSpeed = 100f;
+    public GameObject cameraPositionIndicator;
+    
+    [SerializeField, Tooltip("How fast should camera move around the map?")] private float cameraMoveSpeed = 100f;
 
-    [Tooltip("How fast should camera zoom in and out?")] public float cameraZoomSpeed = 100f;
+    [SerializeField, Tooltip("How fast should camera zoom in and out?")] private float cameraZoomSpeed = 100f;
 
-    [Tooltip("How close mouse cursor should be placed to move camera around?")] public float mouseMoovementArea = 10f;
+    [SerializeField, Tooltip("How close mouse cursor should be placed to move camera around?")] private float mouseMoovementArea = 10f;
 
-    public float minCameraX, maxCameraX, minCameraZ, maxCameraZ;
+    [SerializeField] private float minCameraX, maxCameraX, minCameraZ, maxCameraZ;
 
-    [Tooltip("How close to the ground can camera zoom down?")] public float minCameraY = 75f;
+    [SerializeField, Tooltip("How close to the ground can camera zoom down?")] private float minCameraY = 75f;
 
-    [Tooltip("How hight could camera fly?")] public float maxCameraY = 2000f;
+    [SerializeField,Tooltip("How high could camera fly?")] private float maxCameraY = 2000f;
 
-    [Tooltip("How low camera should go to reveal locations on the map?")] public float locationsHidingDistance;
+    [SerializeField, Tooltip("How low camera should go to reveal locations on the map?")] 
+    private float locationsHidingDistance;
 
-    [HideInInspector] public bool locationsVisible;
+    [SerializeField, Tooltip("How low camera should go to reveal locations on the map?")]
+    private float smallObjectsHidingDistance;
 
-    private List<Location> locations;
+    private GameObject[] _smallObjects;
 
-    private Camera cam;
+    private bool _locationsVisible;
+    private bool _smallObjectsVisible;
 
-    private LayerMask mask; // culling-mask used to retrieve non-culled visibility state
+    private LayerMask _mask; // culling-mask used to retrieve non-culled visibility state
 
-    private Quaternion noRotation;
-    private Vector3 tempRotation;
+    private Quaternion _noRotation;
+    private Vector3 _tempRotation;
 
-    float cameraSpeedModiffier; // modifies speed of camera acording to it's height above the map
+    private float _cameraSpeedModifier; // modifies speed of camera according to it's height above the map
 
-    float deltaTime;
+    private float _deltaTime;
 
-    Vector3 cameraPosition; // used to move Camera around map
+    private Vector3 _cameraPosition; // used to move Camera around map
 
-    void Awake()
+    private Transform _cameraRig;
+
+    private const double Tolerance = 0.01;
+    
+    private void Awake()
     {
         if (Instance == null) {
             Instance = this;
         } else {
             Destroy(gameObject);
         }
-        
-        cam = Camera.main;
-        noRotation = transform.parent.rotation;
-        mask = cam.cullingMask;
 
-        locations = new List<Location>();
-        locationsVisible = true;
+        _smallObjects = GameObject.FindGameObjectsWithTag("SmallThing");
+        
+        _cameraRig = transform.parent;
+        _noRotation = _cameraRig.rotation;
+
+        UserCamera = GetComponent<Camera>();
+        _mask = UserCamera.cullingMask;
+        
+        LocationsVisible = true;
+        _smallObjectsVisible = true;
 
         CheckLocationsVisibility();
+        
+        CheckSmallObjectsVisibility();
     }
 
-    void OnPreCull()
+    private void OnPreCull()
     {
-        foreach (Light light in ignoredLights)
+        foreach (Light lightToIgnore in ignoredLights)
         {
-            light.enabled = false;
+            lightToIgnore.enabled = false;
         }
     }
 
-    void OnPostRender()
+    private void OnPostRender()
     {
-        foreach (Light light in ignoredLights)
+        foreach (Light lightIgnored in ignoredLights)
         {
-            light.enabled = true;
+            lightIgnored.enabled = true;
         }
     }
-
-
-    void LateUpdate()
+    
+    private void LateUpdate()
     {
-        deltaTime = Time.deltaTime;
+        _deltaTime = Time.deltaTime;
 
-        cameraPosition = transform.parent.position;
+        _cameraPosition = transform.parent.position;
 
         if (Input.GetMouseButton(1))
         {
@@ -87,90 +107,114 @@ public class CameraController : MonoBehaviour
 
         if (Input.GetMouseButtonUp(1))
         {
-            transform.parent.rotation = noRotation;
+            transform.parent.rotation = _noRotation;
         }
-
-
-        cameraSpeedModiffier = cameraPosition.y / maxCameraY;
+        
+        _cameraSpeedModifier = _cameraPosition.y / maxCameraY;
 
         if (Input.GetKey(KeyCode.W) || Input.mousePosition.y >= Screen.height - mouseMoovementArea) {
-            cameraPosition.z += cameraMoveSpeed * cameraSpeedModiffier * deltaTime;
+            _cameraPosition.z += cameraMoveSpeed * _cameraSpeedModifier * _deltaTime;
         }
 
         if (Input.GetKey(KeyCode.S) || Input.mousePosition.y <= mouseMoovementArea) {
-            cameraPosition.z -= cameraMoveSpeed * cameraSpeedModiffier * deltaTime;
+            _cameraPosition.z -= cameraMoveSpeed * _cameraSpeedModifier * _deltaTime;
         }
 
         if (Input.GetKey(KeyCode.A) || Input.mousePosition.x <= mouseMoovementArea) {
-            cameraPosition.x -= cameraMoveSpeed * cameraSpeedModiffier * deltaTime;
+            _cameraPosition.x -= cameraMoveSpeed * _cameraSpeedModifier * _deltaTime;
         }
 
         if (Input.GetKey(KeyCode.D) || Input.mousePosition.x >= Screen.width - mouseMoovementArea)
         {
-            cameraPosition.x += cameraMoveSpeed * cameraSpeedModiffier * deltaTime;
+            _cameraPosition.x += cameraMoveSpeed * _cameraSpeedModifier * _deltaTime;
         }
 
-        cameraPosition.z = Mathf.Clamp(cameraPosition.z, minCameraZ, maxCameraZ);
-        cameraPosition.x = Mathf.Clamp(cameraPosition.x, minCameraX, maxCameraX);
+        _cameraPosition.z = Mathf.Clamp(_cameraPosition.z, minCameraZ, maxCameraZ);
+        _cameraPosition.x = Mathf.Clamp(_cameraPosition.x, minCameraX, maxCameraX);
 
         float scroll = Input.mouseScrollDelta.y; // Input.GetAxis("Mouse ScrollWheel");
-        cameraPosition.y -= scroll * cameraZoomSpeed * deltaTime;
+        _cameraPosition.y -= scroll * cameraZoomSpeed * _cameraSpeedModifier * _deltaTime;
+        if (Mathf.Abs(scroll) > 0)
+        {
+            ResizeMinimapIndicator(_cameraPosition.y);
+        }
 
-        cameraPosition.y = Mathf.Clamp(cameraPosition.y, minCameraY, maxCameraY);
+        _cameraPosition.y = Mathf.Clamp(_cameraPosition.y, minCameraY, maxCameraY);
 
-        transform.parent.position = cameraPosition;
-
+        transform.parent.position = _cameraPosition;
+        
         CheckLocationsVisibility();
+        
+        CheckSmallObjectsVisibility();
     }
 
+    private void ResizeMinimapIndicator(float cameraY)
+    {
+        cameraPositionIndicator.transform.localScale = new Vector3(cameraY * 2, cameraY * 1.5f, 1f);
+    }
+    
     private void RotateCamera()
     {
-        if (Input.GetAxis("Mouse X") != 0 || Input.GetAxis("Mouse Y") != 0)
+        if (Math.Abs(Input.GetAxis("Mouse X")) > Tolerance || Math.Abs(Input.GetAxis("Mouse Y")) > Tolerance)
         {
-            tempRotation.x += Input.GetAxis("Mouse X") * 10f;
-            tempRotation.y -= Input.GetAxis("Mouse Y") * 10f;
+            _tempRotation.x += Input.GetAxis("Mouse X") * 10f;
+            _tempRotation.y -= Input.GetAxis("Mouse Y") * 10f;
 
-            tempRotation.y = Mathf.Clamp(tempRotation.y, -30f, 150f);
+            _tempRotation.y = Mathf.Clamp(_tempRotation.y, -30f, 150f);
         }
 
-        Quaternion QT = Quaternion.Euler(tempRotation.y, tempRotation.x, 0f);
+        Quaternion quaternion = Quaternion.Euler(_tempRotation.y, _tempRotation.x, 0f);
 
-        transform.parent.rotation = Quaternion.Lerp(transform.parent.rotation, QT, Time.deltaTime * 10f);
+        _cameraRig.rotation = Quaternion.Lerp(transform.parent.rotation, quaternion, Time.deltaTime * 10f);
     }
 
+    // We hide small objects and buildings when camera is high-enough:
     private void CheckLocationsVisibility()
     {
-        // Hiding and deactivating colliders of objects on the map when camera is too high
         if (transform.position.y >= locationsHidingDistance)
         {
-            if (locationsVisible)
-            {
-                locationsVisible = false;
-                cam.cullingMask = 1;
-                ShowOrHideLocations();
-            }
-        }
-        else
-        {
-            if (!locationsVisible)
-            {
-                locationsVisible = true;
-                cam.cullingMask = mask;
-                ShowOrHideLocations();
-            }
+            if (!LocationsVisible) return;
+            LocationsVisible = false;
+            UserCamera.cullingMask = 1;
+            
+            ShowOrHideLocations();
+        } else {
+            if (LocationsVisible) return;
+            LocationsVisible = true;
+            UserCamera.cullingMask = _mask;
+            
+            ShowOrHideLocations();
         }
     }
 
-    public void RegisterInCameraLocationsList(Location location)
+    private void CheckSmallObjectsVisibility()
     {
-        locations.Add(location);
+        if (transform.position.y >= smallObjectsHidingDistance) {
+            if (!_smallObjectsVisible) return;
+            _smallObjectsVisible = false;
+            ShowOrHideSmallObjects();
+        } else {
+            if (_smallObjectsVisible) return;
+            _smallObjectsVisible = true;
+            ShowOrHideSmallObjects();
+        }
     }
 
-    void ShowOrHideLocations()
+    private void ShowOrHideSmallObjects()
     {
-        for (int i = 0; i < MapScript.Instance.locations.Count; i++)
+        for (int i = 0; i < _smallObjects.Length; i++)
         {
-            MapScript.Instance.locations[i].ShowOrHideOnMap();
+            _smallObjects[i].SetActive(_smallObjectsVisible);
+        }
+    }
+
+    private void ShowOrHideLocations()
+    {
+        for (int i = 0; i < MapScript.Instance.LocationsList.Length; i++)
+        {
+            GameObject location = MapScript.Instance.LocationsList[i].gameObject;
+            
+            location.SetActive(LocationsVisible);
         }
     }
 }

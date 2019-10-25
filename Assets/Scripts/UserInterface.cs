@@ -1,30 +1,43 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System;
 
-[RequireComponent(typeof(MapScript))]
+[ExecuteInEditMode]
 public class UserInterface : MonoBehaviour
 {
-    public static UserInterface Instance;
+    public static UserInterface Instance { get; private set; }
+    
+    public bool ActiveUi =>
+        buttonsPanel.activeInHierarchy || infoPanel.gameObject.activeInHierarchy ||
+        optionsPanel.activeInHierarchy;
 
+    public GameObject[] minimapIndicators;
+    public GameObject selectionMarker;
     public Material higlightLocationMaterial;
-    public GameObject buttonsPanel;
-    public GameObject searchingPanel;
-    public Image infoPanel;
-    public TextMeshProUGUI locationName, house, owner, chief, population, garrison;
-    public TMP_Dropdown locationsNamesList;
-    public TMP_InputField locationNameInput;
+    
+    [SerializeField] private GameObject buttonsPanel;
+    [SerializeField] private GameObject searchingPanel;
+    [SerializeField] private GameObject descriptionPanel;
+    [SerializeField] private GameObject lordInfoPanel;
+    [SerializeField] private GameObject optionsPanel;
+    [SerializeField] private Image infoPanel;
 
-    /*This Dictionary is used to find Vector3 location of searched place and transform it to the
-     new position of the Camera. Locations are stored as lists of floats since we already implemented
-     simmilar storing system in SaveScript.*/
-    private Dictionary<string, List<float>> locationsPositions;
+    [SerializeField] private TextMeshProUGUI locationName, ownerName, lordName, lordTitle, lordSeignior, lordVassals, 
+        lordPossesions, chiefLabel, chief, population, garrison, description;
+    [SerializeField] private TMP_Dropdown locationsNamesList;
+    [SerializeField] private TMP_InputField locationNameInput;
+    
+    [SerializeField] private Button descriptionButton;
+    [SerializeField] private Button minimapButton;
+    [SerializeField] private Button lordInfoButton;
+    
+    private bool _locationInfoDisplayed = false;
 
-    private bool locationInfoDisplayed;
+    private Location _locationUnderCursor;
 
-    private Location locationUnderCursor;
+    private char[] _charsToTrim = {',', ' '};
 
     private void Awake()
     {
@@ -35,170 +48,188 @@ public class UserInterface : MonoBehaviour
         }
     }
 
-    private Dictionary<string, List<float>> CreateLocationsTable()
-    {
-        Dictionary<string, List<float>> dict = new Dictionary<string, List<float>>();
-
-        for (int i = 0; i < MapScript.Instance.locations.Count; i++)
-        {
-            Location location = MapScript.Instance.locations[i];
-            List<float> pseudoTransform = new List<float>(3);
-
-            pseudoTransform.Add(location.transform.position.x);
-            pseudoTransform.Add(location.transform.position.y + 400f); // to place Camera above the found location
-            pseudoTransform.Add(location.transform.position.z - 200f); // and to the south
-
-            dict.Add(location.locationName, pseudoTransform);
-        }
-        return dict;
-    }
-
     /* This method unpacks data obtained from currently mouse-pointed Village object
      * The unpacked data is assigned to the UI Text elements displayed to the user.*/
-    public void SetLocationInfo(Location location) {
-
+    public void SetLocationInfo(Location location)
+    {
+        if (_locationInfoDisplayed) return;
+        
         locationName.text = location.locationName;
-        house.text = location.house;
-        owner.text = location.owner;
+        ownerName.text = location.owner;
+        chiefLabel.text = GetChiefType(location.locationType);
+        chief.text = location.chief;
+        description.text = location.description;
 
         if (location.GetComponent<PopulatedPlace>()) {
-            population.text = location.GetComponent<PopulatedPlace>().population.ToString();
-            chief.text = location.GetComponent<PopulatedPlace>().chief;
+            population.text = location.GetComponent<PopulatedPlace>().population.ToString(); 
         }
 
-        if (location.GetComponent<Fortress>())
-        {
+        if (location.GetComponent<Fortress>()) {
             garrison.text = location.GetComponent<Fortress>().garrison.ToString();
         }
+
+        lordInfoButton.interactable = ownerName.text.Length > 0 && LordsManager.Instance.Lords.ContainsKey(ownerName.text);
+
+        descriptionButton.interactable = location.description.Length > 0;
+
+        DisplayInfoPanel();
     }
 
-    private void Update()
+    private static string GetChiefType(MapScript.LocationType locationLocationType)
     {
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        RaycastHit hit;
-
-        if (Physics.Raycast(ray, out hit))
+        switch (locationLocationType)
         {
-            Location hitLocation = hit.collider.GetComponent<Location>();
-
-            if (CameraController.Instance.locationsVisible && hitLocation) {
-                locationUnderCursor = hitLocation;
-
-                if (!locationUnderCursor.locationHiglighted) {
-                    locationUnderCursor.HiglightLocationObjects(true);
-                }
-            } else if (locationUnderCursor != null) {
-                locationUnderCursor.HiglightLocationObjects(false);
-                locationUnderCursor = null;
-            }
-        }
-
-        if (Input.GetMouseButtonDown(0))
-        {
-            if (Physics.Raycast(ray, out hit))
-            {
-                Location location = hit.collider.GetComponent<Location>();
-
-                if (location && CameraController.Instance.locationsVisible)
-                {
-                    if (!locationInfoDisplayed)
-                    {
-                        locationInfoDisplayed = true;
-                        SetLocationInfo(location);
-                    }
-                }
-                else if (infoPanel)
-                {
-                    locationInfoDisplayed = false;
-                }
-            }
-            UpdateInfoPanel(locationInfoDisplayed);
+            case MapScript.LocationType.Wioska:
+                return "Sołtys:";
+            case MapScript.LocationType.Forteca:
+                return "Komendant:";
+            case MapScript.LocationType.Miasteczko:
+                return "Burmistrz:";
+            case MapScript.LocationType.Miasto:
+                return "Burmistrz:";
+            case MapScript.LocationType.Opactwo:
+                return "Opat:";
+            case MapScript.LocationType.Gospoda:
+                return "Gospodarz:";
+            default:
+                return "Zarządca:";
         }
     }
 
     private void LateUpdate()
     {
         if (Input.mousePosition.y > Screen.height - (Screen.height / 4)) {
-            if (!buttonsPanel.activeInHierarchy) {
-                buttonsPanel.SetActive(true);
-                if (locationsPositions == null) {
-                    locationsPositions = CreateLocationsTable();
-                    //Debug.Log(locationsPositions.Count);
-                }
-            }
-        } else {
-            if (buttonsPanel.activeInHierarchy) {
-                buttonsPanel.SetActive(false);
-                if (searchingPanel.activeInHierarchy) {
-                    searchingPanel.SetActive(false);
-                }
+            if (buttonsPanel.activeInHierarchy) return;
+            buttonsPanel.SetActive(true);
+        }
+        else
+        {
+            if (!buttonsPanel.activeInHierarchy) return;
+            buttonsPanel.SetActive(false);
+            if (searchingPanel.activeInHierarchy)
+            {
+                searchingPanel.SetActive(false);
             }
         }
     }
 
-    public void UpdateInfoPanel(bool shouldBeActive) {
-        if (shouldBeActive) {
-            if (!infoPanel.IsActive()) {
-                DisplayInfoPanel();
-            }
-        } else {
-            if (infoPanel.IsActive()) {
-                HideInfoPanel();
-            }
-        }
-    }
-
-    void DisplayInfoPanel() {
+    private void DisplayInfoPanel() {
         infoPanel.gameObject.SetActive(true);
     }
 
-    void HideInfoPanel() {
+    public void HideInfoPanel() {
         infoPanel.gameObject.SetActive(false);
         population.text = "-";
         garrison.text = "-";
         chief.text = "-";
+        description.text = String.Empty;
     }
 
+    public void OpenDescriptionPanel()
+    {
+        descriptionPanel.SetActive(true);
+        infoPanel.raycastTarget = false;
+    }
+
+    public void CloseDescriptionPanel()
+    {
+        descriptionPanel.SetActive(false);
+        infoPanel.raycastTarget = true;
+    }
+    
     public void OpenLocationListMenu()
     {
-        //Debug.Log("Now, list of locations and input field should be displayed.");
         searchingPanel.SetActive(true);
-
-        if (locationsNamesList.options.Count == 0) {
-            locationsNamesList.AddOptions(MapScript.Instance.locationNames);
+        if (locationsNamesList.options.Count < MapScript.Instance.LocationsList.Length) {
+            locationsNamesList.ClearOptions();
+            locationsNamesList.AddOptions(MapScript.Instance.LocationNames);
         }
+    }
+
+    public void OpenOptions()
+    {
+        optionsPanel.SetActive(true);
+    }
+
+    public void CloseOptions()
+    {
+        optionsPanel.SetActive(false);
+    }
+    
+    public void OpenLordPanel()
+    {
+        lordName.text = ownerName.text;
+        lordInfoPanel.SetActive(true);
+
+        if (LordsManager.Instance != null)
+        {
+            Dictionary<string, Lord> lords = LordsManager.Instance.Lords;
+            Lord lord;
+            lord = lords[lordName.text];
+
+            lordTitle.text += lord.Title;
+            
+            lordSeignior.text += lords[lord.Seignior].Title + " " + lord.Seignior;
+            
+            foreach (var vassal in lord.Vassals) {
+                lordVassals.text += vassal + ", ";
+            }
+            
+            foreach (Location location in LordsManager.Instance.Lords[lordName.text].Possessions) {
+                lordPossesions.text += location.locationName + ", ";
+            }
+
+            lordSeignior.text = lordSeignior.text.TrimEnd(_charsToTrim);
+            lordPossesions.text = lordPossesions.text.TrimEnd(_charsToTrim);
+        }
+        
+        infoPanel.raycastTarget = false;
+    }
+
+    public void CloseLordPanel()
+    {
+        lordInfoPanel.SetActive(false);
+        lordTitle.text = "Tytuł: ";
+        lordSeignior.text = "Jest wasalem: ";
+        lordVassals.text = "Jego wasale: ";
+        lordPossesions.text = "Posiadłości: ";
+        
+        infoPanel.raycastTarget = true;
+    }
+
+    public void TeleportOnMinimap()
+    {
+        Debug.Log("You should have been teleported to minimap-selected position.");
     }
 
     public void GetNameFromInput()
     {
-        string nameFromInput = locationNameInput.text.ToString();
+        string nameFromInput = locationNameInput.text;
         SearchLocationByName(nameFromInput);
     }
 
     public void SelectNameFromList()
     {
-        string selectedName = MapScript.Instance.locationNames[locationsNamesList.value].ToString();
+        string selectedName = MapScript.Instance.LocationNames[locationsNamesList.value];
         SearchLocationByName(selectedName);
     }
 
-    public void SearchLocationByName(string searchedName)
+    private void SearchLocationByName(string searchedName)
     {
         Debug.Log("Searching for location named: " + searchedName);
 
-        // retrieve desired Camera position from our Dicitionary using name as a key:
-        if (locationsPositions.ContainsKey(searchedName)) {
-
-            Vector3 desiredCameraPosition = new Vector3();
-
-            desiredCameraPosition.x = locationsPositions[searchedName][0];
-            desiredCameraPosition.y = locationsPositions[searchedName][1];
-            desiredCameraPosition.z = locationsPositions[searchedName][2];
-
-            //Debug.Log(desiredCameraPosition);
-
-            Camera.main.transform.parent.position = desiredCameraPosition; 
+        if (MapScript.Instance.LocationNames.Contains(searchedName)) {
+            Vector3 searchedLocation = MapScript.Instance.locationsDictionary[searchedName].transform.position;
+            Vector3 desiredPosition = new Vector3(searchedLocation.x, searchedLocation.y+400, searchedLocation.z-200);
+            
+            CameraController.UserCamera.transform.parent.position = desiredPosition; 
         } else {
             Debug.Log("Sorry, such place does not exist on the map!");
         }  
+    }
+    
+    public static UserInterface GetUserInterfaceInstance()
+    {
+        return Instance == null ? FindObjectOfType<UserInterface>() : Instance;
     }
 }

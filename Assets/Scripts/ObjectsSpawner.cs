@@ -1,9 +1,10 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Spawn and place randomly on the terrain any prefab.
-/// </summary>
+[ExecuteInEditMode]
+// <summary>
+// Spawn and place randomly on the terrain any prefab.
+// </summary>
 public class ObjectsSpawner : MonoBehaviour
 {   
     [SerializeField, Tooltip("Do you want this prefab to be spawned?")] bool spawn;
@@ -14,38 +15,40 @@ public class ObjectsSpawner : MonoBehaviour
     [SerializeField, Tooltip("How many gameObjects do you want to place on the map?")] int numberOfObjectsToSpawn;
     [SerializeField, Tooltip("Put here gameObject from hierarchy, you want to be parrent of the spawned prefab.")] Transform parentTransform;
 
-    private List<Vector3> positions3D;
+    private List<Vector3> _positions3D;
 
-    private List<int> terrainIndexes;
+    private List<int> _terrainIndexes;
 
-    public bool spawningComplete;
-
+    private MapScript _mapScriptInstance;
+    
     private void Awake()
     {
-        terrainIndexes = new List<int>(numberOfObjectsToSpawn);
+        _mapScriptInstance = MapScript.GetMapScriptInstance();
+        
+        _terrainIndexes = new List<int>(numberOfObjectsToSpawn);
     }
-
-    // Start is called before the first frame update
-    void Start()
+    
+    public void RunSpawning()
     {
-        if (spawn)
-        {
-            positions3D = new List<Vector3>(numberOfObjectsToSpawn);
+        if (spawn) {
+            _positions3D = new List<Vector3>(numberOfObjectsToSpawn);
 
             GenerateRandomPositionsOnMap();
 
             SpawnNewObjectsForEachPositionOnMap();
-
-            spawningComplete = true;
-            MapScript.Instance.completedSpawnings += 1;
+            
+            _mapScriptInstance.finishedSpawners += 1;
+        }
+        else {
+            _mapScriptInstance.finishedSpawners += 1;
         }
     }
 
-    void GenerateRandomPositionsOnMap()
+    private void GenerateRandomPositionsOnMap()
     {
         for (int i = 0; i < numberOfObjectsToSpawn; i++)
         {
-            positions3D.Add(GetOneRandomPositionOnMap());
+            _positions3D.Add(GetOneRandomPositionOnMap());
         }
     }
 
@@ -53,30 +56,28 @@ public class ObjectsSpawner : MonoBehaviour
     /// Public method to obtaining randomly placed Vector3 positions on the map.
     /// </summary>
     /// <returns>Vector3</returns>
-    public Vector3 GetOneRandomPositionOnMap()
+    private static Vector3 GetOneRandomPositionOnMap()
     {
         int posx = Random.Range(100, 11900);
         int posz = Random.Range(100, 11900);
 
-        int currentTerrainIndex = MapScript.Instance.GetTerrainForCoordinates(posx, posz);
+        //int currentTerrainIndex = MapScript.GetTerrainForCoordinates(posx, posz);
 
-        float posy = Terrain.activeTerrains[currentTerrainIndex].terrainData.GetHeight(posx, posz);
+        float posy = MapScript.GetTerrainHeightAtPosition(posx, posz);//Terrain.activeTerrains[currentTerrainIndex].terrainData.GetHeight(posx, posz);
 
         return new Vector3(posx, posy, posz);
     }
 
-    void SpawnNewObjectsForEachPositionOnMap()
+    private void SpawnNewObjectsForEachPositionOnMap()
     {
-        if (objectToSpawn != null)
+        if (objectToSpawn == null) return;
+        for (int i = 0; i < numberOfObjectsToSpawn; i++)
         {
-            for (int i = 0; i < numberOfObjectsToSpawn; i++)
-            {
-                GameObject newObject = Instantiate(objectToSpawn, positions3D[i], Quaternion.identity);
+            GameObject newObject = Instantiate(objectToSpawn, _positions3D[i], Quaternion.identity);
 
-                if (parentTransform != null)
-                {
-                    newObject.transform.SetParent(parentTransform);
-                }
+            if (parentTransform != null)
+            {
+                newObject.transform.SetParent(parentTransform);
             }
         }
     }

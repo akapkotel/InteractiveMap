@@ -1,6 +1,7 @@
-﻿using UnityEngine;
+﻿using UnityEditor;
+using UnityEngine;
 
-static public class UnityEngineExtensions
+public static class UnityEngineExtensions
 {
     /// <summary>
     /// Returns the component of Type type. If one doesn't already exist on the GameObject it will be added.
@@ -12,4 +13,6 @@ static public class UnityEngineExtensions
     {
         return gameObject.GetComponent<T>() ?? gameObject.AddComponent<T>();
     }
+    
+
 }

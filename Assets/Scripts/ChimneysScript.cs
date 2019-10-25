@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 [RequireComponent(typeof(DayAndNightCycle))]
@@ -7,49 +8,61 @@ public class ChimneysScript : ScheduledScript
 {
     [SerializeField, Tooltip("How often should each chimney be randomly refreshed (seconds between each update)")] int chimneySmokeSwitchRate;
 
-    private List<ParticleSystem> chimneys;
+    public float switchChance = 0.25f;
+    
+    public bool smoking = true;
+    
+    private ParticleSystem[] _chimneys;
 
-    private List<int> smokingChimneys;
+    private List<int> _smokingChimneys;
 
-    private int lastUpdate;
+    private int _lastUpdate;
 
-    void Awake()
+    private void Awake()
     {
-        chimneys = new List<ParticleSystem>();
-
-        smokingChimneys = new List<int>();
+        _smokingChimneys = new List<int>();
     }
 
     private void Start()
     {
-        GameObject[] chimneysTransforms = GameObject.FindGameObjectsWithTag("Chimney");
+       _chimneys = GameObject.FindGameObjectsWithTag("Chimney")
+            .Select(t => t.GetComponent<ParticleSystem>())
+            .ToArray();
 
-        for (int i = 0; i < chimneysTransforms.Length; i++)
-        {
-            ParticleSystem chimneyParticleSystem = chimneysTransforms[i].GetComponent<ParticleSystem>();
-            chimneys.Add(chimneyParticleSystem);
-            SwitchSmokeInChimneys();
-        }
+        SwitchSmokeInChimneys();
     }
 
+    public void ToggleSmokes()
+    {
+        smoking = !smoking;
+        SwitchSmokeInChimneys(true);
+    }
+    
     private void Update()
     {
-        if (DayAndNightCycle.Instance.CheckIfTimePassed(3, lastUpdate))
+        if (!smoking) return;
+
+        int time = (int) Time.realtimeSinceStartup;
+        if (time - _lastUpdate > chimneySmokeSwitchRate)
         {
+            _lastUpdate = time;
+            Debug.Log("Chimneys switching!");
             SwitchSmokeInChimneys();
         }
     }
 
-    public void SwitchSmokeInChimneys()
+    private void SwitchSmokeInChimneys(bool supress = false)
     {
-        for (int i = 0; i < chimneys.Count; i++) {
-            if (Random.value < 0.25) {
-                if (smokingChimneys.Contains(i)) {
-                    chimneys[i].Stop();
-                    smokingChimneys.Remove(i);
+        for (int i = 0; i < _chimneys.Length; i++)
+        {
+            if (supress || (Random.value < switchChance))
+            {
+                if (_smokingChimneys.Contains(i)) {
+                    _chimneys[i].Stop();
+                    _smokingChimneys.Remove(i);
                 } else {
-                    chimneys[i].Play();
-                    smokingChimneys.Add(i);
+                    _chimneys[i].Play();
+                    _smokingChimneys.Add(i);
                 }
             }
         }

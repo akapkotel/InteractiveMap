@@ -5,14 +5,14 @@ using UnityEngine;
 
 public class SaveScript : MonoBehaviour
 {
-    protected string savePath;
+    protected string SavePath;
 
     public List<List<float>> pseudoVectors = new List<List<float>>();
     public List<List<float>> pseudoQuaternions = new List<List<float>>();
 
     private void Awake()
     {
-        savePath = Application.persistentDataPath + "/gamesave.sav";
+        SavePath = Application.persistentDataPath + "/gamesave.sav";
     }
 
     public void SaveData(List<Transform> villagesTransforms)
@@ -37,7 +37,7 @@ public class SaveScript : MonoBehaviour
             savedData.pseudoQuaternions.Add(pseudoQuaternion);
         }
         var binaryFormatter = new BinaryFormatter();
-        using (var fileStream = File.Create(savePath))
+        using (var fileStream = File.Create(SavePath))
         {
             binaryFormatter.Serialize(fileStream, savedData);
         }
@@ -46,20 +46,20 @@ public class SaveScript : MonoBehaviour
 
     public List<Transform> LoadData()
     {
-        if (File.Exists(savePath))
+        if (File.Exists(SavePath))
         {
             List<Transform> transforms = new List<Transform>();
 
             GameObject dummyObject = new GameObject();
-            Transform _transform = dummyObject.transform;
+            Transform transform = dummyObject.transform;
 
             Vector3 position = new Vector3();
-            Quaternion _quaternion = Quaternion.identity;
+            Quaternion quaternion = Quaternion.identity;
 
             Save loadedData;
 
             var binaryFormatter = new BinaryFormatter();
-            using (var fileStream = File.OpenRead(savePath))
+            using (var fileStream = File.OpenRead(SavePath))
             {
                 loadedData = (Save)binaryFormatter.Deserialize(fileStream);
 
@@ -72,15 +72,15 @@ public class SaveScript : MonoBehaviour
                     position.y = pseudoVectors[i][1];
                     position.z = pseudoVectors[i][2];
 
-                    _quaternion.x = pseudoQuaternions[i][0];
-                    _quaternion.y = pseudoQuaternions[i][1];
-                    _quaternion.z = pseudoQuaternions[i][2];
-                    _quaternion.w = pseudoQuaternions[i][3];
+                    quaternion.x = pseudoQuaternions[i][0];
+                    quaternion.y = pseudoQuaternions[i][1];
+                    quaternion.z = pseudoQuaternions[i][2];
+                    quaternion.w = pseudoQuaternions[i][3];
 
-                    _transform.position = position;
-                    _transform.rotation = _quaternion;
+                    transform.position = position;
+                    transform.rotation = quaternion;
 
-                    transforms.Add(_transform);
+                    transforms.Add(transform);
                 }
             }
             return transforms;

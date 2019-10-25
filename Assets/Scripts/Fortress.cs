@@ -1,16 +1,13 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
-[ExecuteInEditMode]
 public class Fortress : Location
 {
     public MapScript.Fortresses fortressType;
     public int garrison;
 
-    void Start()
+    private void Awake()
     {
-        name = locationName;
-        garrison = FindObjectOfType<MapScript>().garrisonsSizes[fortressType];
+        locationType = MapScript.LocationType.Forteca;
+        garrison = MapScript.GarrisonsSizes[fortressType];
     }
 }

@@ -1,140 +1,141 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
-using System.IO;
-using System;
+using System.Linq;
+using JetBrains.Annotations;
+using UnityEngine.Serialization;
+using Random = UnityEngine.Random;
 
-[RequireComponent(typeof(DayAndNightCycle), typeof(ChimneysScript), typeof(UserInterface))]
+[ExecuteInEditMode]
+[RequireComponent(typeof(DayAndNightCycle), typeof(ChimneysScript), 
+    typeof(UserInterface))]
 public class MapScript : MonoBehaviour
 {
-    public static MapScript Instance;
+    public static MapScript Instance { get; private set; }
 
     public enum RotationDirection { Clockwise, Counterclockwise };
-    public enum Fortresses { MilitaryPost, Castel, Castle, SmallFortress, Fortress, FortifiedCity }
+    
     [HideInInspector]
-    public Dictionary<Fortresses, int> garrisonsSizes = new Dictionary<Fortresses, int>
+    public enum LocationType { Wioska, Miasteczko, Miasto, Opactwo, Inne, Forteca, Pałac, Kamieniołom, Dworek, Kasztel, Gospoda, Kościół }
+    public enum Fortresses { PosterunekWojskowy, Kasztel, Zamek, Fort, Forteca, UfortyfikowaneMiasto }
+    [HideInInspector]
+    public static readonly Dictionary<Fortresses, int> GarrisonsSizes = new Dictionary<Fortresses, int>
     {
-        [Fortresses.Castel] = 20,
-        [Fortresses.Castle] = 50,
-        [Fortresses.MilitaryPost] = 20,
-        [Fortresses.SmallFortress] = 300,
-        [Fortresses.Fortress] = 1000,
-        [Fortresses.FortifiedCity] = 500
+        [Fortresses.Kasztel] = 20,
+        [Fortresses.Zamek] = 50,
+        [Fortresses.PosterunekWojskowy] = 20,
+        [Fortresses.Fort] = 300,
+        [Fortresses.Forteca] = 1000,
+        [Fortresses.UfortyfikowaneMiasto] = 500
     };
 
     [SerializeField,
      Tooltip("Put here scripts you wan to be started AFTER spawning all objects on the map. Scripts must inherit from ScheduledScript, not from MonoBehaviour.")]
     private ScheduledScript[] scheduledScripts;
-    private int completedScheduleScripts; // keeps track of scripts execution, required for proper working of some indexers later
+    private int _completedScheduleScripts; // keeps track of scripts execution, required for proper working of some indexers later
 
     [SerializeField] private ObjectsSpawner[] spawners;
-    public int completedSpawnings;
+    [HideInInspector] public int finishedSpawners;
 
     public enum VillageSize { Uboga, Przeciętna, Bogata };
 
-    public TextAsset generatedVillagesFile;
     public TextAsset vilagesNamesTextFile;
-
-    public List<Location> locations = new List<Location>();
-    public List<string> locationNames = new List<string>();
-
-    public GameObject[] fields;
-    public List<string> vilagesNames = new List<string>();
-    public Fortress[] fortresses;
-
-    public GameObject[] villageBuildings;
-    public GameObject[] townBuildings;
-    public GameObject[] specialBuildings;
+    
+    //Intentionally use three data-structures: Dictionary for fast key-lookups, and lists for fast iterating through in updates: 
+    [FormerlySerializedAs("locations")] public Dictionary<string, Location> locationsDictionary = new Dictionary<string, Location>();
+    public Location[] LocationsList { get; private set; }
+    public List<string> LocationNames { get; private set; }
+    
+    private List<string> _villagesNames = new List<string>();
+    
+    public GameObject[] Fields { get; private set; }
+    public GameObject[] VillageHouses { get; private set; }
+    public GameObject[] TownHousesLeft { get; private set; }
+    public GameObject[] TownHousesMiddle { get; private set; }
+    public GameObject[] TownHousesRight { get; private set; }
+    public GameObject[] Churches { get; private set; }
+    public GameObject[] Taverns { get; private set; }
+    public GameObject[] Markets { get; private set; }
+    public GameObject[] Windmills { get; private set; }
 
     public Dictionary<int, Material> materialsDict = new Dictionary<int, Material>();
-
-    private Camera cam;
-    private bool infoPanel;
-    private bool saved, loaded;
+    
+    private Camera _cam;
+    private bool _infoPanel;
+    private bool _saved, _loaded;
 
     private void Awake()
     {
-        if (Instance == null)
-        {
+        if (Instance == null) {
             Instance = this;
-        }
-        else
-        {
+        } else {
             Destroy(gameObject);
         }
 
-        vilagesNames = LoadNamesFromFile();
+        new UserProfile("testProfile");
+
+        _villagesNames = LoadVillagesNamesFromFile();
+        
+        LoadPrefabs();
 
         spawners = GetComponents<ObjectsSpawner>();
+        finishedSpawners = 0;
+    }
+
+    private void LoadPrefabs()
+    {
+        Fields = Resources.LoadAll<GameObject>("Prefabs/Fields");
+        VillageHouses = Resources.LoadAll<GameObject>("Prefabs/VillageHouses");
+        Taverns = Resources.LoadAll<GameObject>("Prefabs/Taverns");
+        Markets = Resources.LoadAll<GameObject>("Prefabs/Markets");
+        Windmills = Resources.LoadAll<GameObject>("Prefabs/Windmills");
+        Churches = Resources.LoadAll<GameObject>("Prefabs/Churches");
+        TownHousesLeft = Resources.LoadAll<GameObject>("Prefabs/TownHouses/LeftCorner");
+        TownHousesMiddle = Resources.LoadAll<GameObject>("Prefabs/TownHouses/Middle");
+        TownHousesRight = Resources.LoadAll<GameObject>("Prefabs/TownHouses/RightCorner");
     }
 
     private void Start()
     {
-        fortresses = FindObjectsOfType<Fortress>();
-
         RunObjectSpawners();
 
         InitializeScheduledScripts();
 
-        BuildMaterialsDict();
+        //BuildMaterialsDict();
     }
 
     private void CreateLocationsList()
     {
-        Location[] temp = FindObjectsOfType<Location>();
-        foreach (Location location in temp)
+        LocationsList = FindObjectsOfType<Location>();
+        List<string> revealedLocations = UserProfile.Instance.FoundHiddenLocations;
+        LocationNames = LocationsList
+            .Where(t => t.known || revealedLocations.Contains(t.locationName)).Select(t => t.locationName).ToList();
+        for (int i = 0; i < LocationsList.Length; i++)
         {
-            locations.Add(location);
-            locationNames.Add(location.locationName);
+            locationsDictionary.Add(LocationsList[i].locationName, LocationsList[i]);
         }
+        
+        Debug.Log("Location lists created. Locations found: " + LocationsList.Length);
     }
 
-    void BuildMaterialsDict()
+    private void BuildMaterialsDict()
     {
-        Material[] materials = Resources.LoadAll<Material>("_Materials/"); //Resources.FindObjectsOfTypeAll<Material>();
-        Debug.Log("Materials found: " + materials.Length);
-        Debug.Log(materials);
+        Material[] materials = Resources.LoadAll<Material>("Materials/");
         for (int i = 0; i < materials.Length; i++)
         {
             materialsDict.Add(i, materials[i]);
         }
     }
-
-    void SaveVillages()
-    {
-        List<Transform> villagesTransforms = new List<Transform>(locations.Count);
-        foreach (Village villageScript in locations)
-        {
-            villagesTransforms.Add(villageScript.GetComponent<Transform>());
-        }
-
-        SaveScript saveScript = FindObjectOfType<SaveScript>();
-
-        saveScript.SaveData(villagesTransforms);
-        saved = true;
-    }
-
-    void LoadVillages()
-    {
-        SaveScript saveScript = FindObjectOfType<SaveScript>();
-
-        List<Transform> loadedTransforms = saveScript.LoadData();
-
-        for (int i = 0; i < loadedTransforms.Count; i++)
-        {
-            locations[i].transform.SetPositionAndRotation(loadedTransforms[i].position, loadedTransforms[i].rotation);
-        }
-        loaded = true;
-    }
-
-    void RunObjectSpawners()
+    
+    private void RunObjectSpawners()
     {
         foreach (ObjectsSpawner spawner in spawners)
         {
-            spawner.enabled = true;
+            spawner.RunSpawning();
         }
     }
 
-    void InitializeScheduledScripts()
+    private void InitializeScheduledScripts()
     {
         foreach (ScheduledScript scheduled in scheduledScripts)
         {
@@ -144,77 +145,73 @@ public class MapScript : MonoBehaviour
 
     private void Update()
     {
+        if (locationsDictionary.Count != 0 || finishedSpawners != spawners.Length) return;
+        // ReSharper disable once Unity.PerformanceCriticalCodeInvocation
+        // This is called only once, not in every frame!
+        CreateLocationsList();
 
-        if (locations.Count == 0 && completedSpawnings == spawners.Length)
-        {
-            CreateLocationsList();
+        if (LordsManager.Instance == null){
+            new LordsManager(locationsDictionary);
         }
-        //if (!saved && villages.Count > 0)
-        //{
-        //    SaveVillages();
-        //}
-
-        //if (!loaded)
-        //{
-        //    LoadVillages();
-        //}
     }
 
-    private List<string> LoadNamesFromFile()
+    private List<string> LoadVillagesNamesFromFile()
     {
-        List<string> result = new List<string>();
-
         string[] names = vilagesNamesTextFile.text.Split(',');
 
-        foreach (string name in names)
+        return names.Select(loadedName => loadedName.Trim()).ToList();
+    }
+
+    public string GetRandomVillageName()
+    {
+        int number = Random.Range(0, _villagesNames.Count);
+        string villageName = _villagesNames[number];
+        _villagesNames.RemoveAt(number);
+        return villageName;
+    }
+    
+    /// <summary>
+    /// Calculates current Terrain index for pair of (x, y) coordinates on the Scene. 
+    /// </summary>
+    /// <param name="x">horizontal, or east-west position</param>
+    /// <param name="y">vertical, or north-south position</param>
+    /// <returns>int</returns>
+    public static int GetTerrainForCoordinates(float x, float y)
+    {
+        int terrainIndex = 0;
+        
+        for (int i = 0; i < Terrain.activeTerrains.Length; i++)
         {
-            result.Add(name.Trim());
-        }
+            Terrain terrain = Terrain.activeTerrains[i];
+            TerrainData terrainData = terrain.terrainData;
+            Bounds worldBounds = new Bounds(terrainData.bounds.center + terrain.transform.position, terrainData.bounds.size);
 
-        return result;
-    }
-
-    private void CreateVillagesDataFile()
-    {
-        string serializedData = string.Empty;
-
-        for (int i = 0; i < locations.Count; i++)
-        {
-            //TODO:
-        }
-
-        // Write to disk
-        StreamWriter writer = new StreamWriter(Application.dataPath + "/_TextFiles/villages.txt", true);
-        writer.Write(serializedData);
-    }
-
-    private void ReadVillagesData()
-    {
-        // Read
-        StreamReader reader = new StreamReader(Application.dataPath + "/_TextFiles/villages.txt");
-        // string lineA = reader.ReadLine();
-    }
-
-    public int GetTerrainForCoordinates(float x, float y)
-    {
-        int terrainIndex;
-
-        if (x < 6001) {
-            if (y < 6001) {
-                terrainIndex = 0;
-            } else {
-                terrainIndex = 2;
-            }
-        } else {
-            if (y < 6001) {
-                terrainIndex = 1;
-            } else {
-                terrainIndex = 3;
-            }
+            if (!worldBounds.Contains(new Vector3(x, y))) continue;
+            terrainIndex = i;
+            break;
         }
         return terrainIndex;
     }
+
+    public static float GetTerrainHeightAtPosition(float posX, float posZ)
+    {
+        int currentTerrainIndex = GetTerrainForCoordinates(posX, posZ);
+        return Terrain.activeTerrains[currentTerrainIndex].terrainData.GetHeight((int)posX, (int)posZ);
+    }
+
+    // Because other scripts sometimes have troubles with finding static references in edit mode, we need assure that some
+    // instance would exist and be accessible at any moment, even in edit mode.
+    public static MapScript GetMapScriptInstance()
+    {
+        return Instance == null ? FindObjectOfType<MapScript>() : Instance;
+    }
+
+    private void OnDestroy()
+    {
+        UserProfile.Instance.SaveData();
+    }
 }
+
 /// <summary>
 /// This wrapper class is required only as an abstraction to pack some other scripts into the one group off "schedulable" scripts,
 /// which would be able to be serialized in inspector and run by another script in particular moment after game initialization.

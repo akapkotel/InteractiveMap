@@ -5,10 +5,10 @@ using UnityEngine;
 public class TimeScript : MonoBehaviour
 {
 
-    public float seconds { get; set; }
+    public float Seconds { get; set; }
     public float epsilon = 0.01f;
 
-    public int hours { get; set; }
+    public int Hours { get; set; }
 
     public static TimeScript MapTime;
 
@@ -21,13 +21,13 @@ public class TimeScript : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        seconds += Time.deltaTime;
+        Seconds += Time.deltaTime;
 
-        hours = (int)seconds;
+        Hours = (int)Seconds;
     }
 
     public bool CheckIfTimePassed(int requestedHours)
     {
-        return seconds - hours < epsilon && hours % requestedHours == 0;
+        return Seconds - Hours < epsilon && Hours % requestedHours == 0;
     }
 }

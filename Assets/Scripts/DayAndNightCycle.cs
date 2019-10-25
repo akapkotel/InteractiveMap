@@ -1,6 +1,8 @@
-﻿using System.Collections;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 /// <summary>
 /// This class controls artificial day-and-night cycle, and also switches on and off all lights on the map.
@@ -11,118 +13,113 @@ using UnityEngine;
 
 public class DayAndNightCycle : ScheduledScript
 {
-    public static DayAndNightCycle Instance;
+    public static DayAndNightCycle Instance { get; private set; }
 
-    [SerializeField, Tooltip("Should day-night cycle be active?")] bool dayAndNightCycye;
-    [SerializeField, Tooltip("How many seconds should 12-hour day last?")] int dayCycleDuration;
-    [SerializeField, Tooltip("How much percent of windows should be bright at the night?"), Range(10, 75)] float brightWindowsRatio;
-    [SerializeField, Tooltip("How much percent of lanterns should be bright at the night?"), Range(25, 95)] float brightLanternsRatio;
+    [Tooltip("Should day-night cycle be active?")] public bool dayAndNightCycle;
+    [SerializeField, Tooltip("How many seconds should 12-hour day last?")] private int dayCycleDuration;
+    [SerializeField, Tooltip("How much percent of windows should be bright at the night?"), Range(10, 75)] private float brightWindowsRatio;
+    [SerializeField, Tooltip("How much percent of lanterns should be bright at the night?"), Range(25, 95)] private float brightLanternsRatio;
 
     public Material lightInTheWindows;
+    public Material hauntedGlow;
     public Material darknessInTheWindows;
     public Material lanternGlass;
-
-    public static Light Sun;
-    public static Light Moon;
 
     public enum DayCycle { Day, Night };
 
     public DayCycle dayCycle;
 
-    private float lastCycleChangeTime;
+    private float _lastCycleChangeTime;
 
-    private float anglePerSecond; // how fast should system rotate around the world
+    private float _anglePerSecond; // how fast should system rotate around the world
 
-    private List<MeshRenderer> windows;
+    private MeshRenderer[] _windows;
 
-    private List<int> brightWindows;
+    private MeshRenderer[] _haunted; // for red-glowing windows of haunted places
 
-    private List<MeshRenderer> lanterns;
+    private List<int> _brightWindows;
 
-    private List<Light> lanternsLights;
+    private MeshRenderer[] _lanterns;
+    
+    private Light[] _lanternsLights;
 
-    private List<int> brightLanterns;
-
-    private int hours { get; set; }
-    private float seconds;
+    private List<int> _brightLanterns;
+    
+    private float _seconds;
     [HideInInspector] public float epsilon = 0.01f;
 
-    private float brightWindowsChance;
-    private float brightLanternsChance;
+    private float _brightWindowsChance;
+    private float _brightLanternsChance;
 
-    private bool reallyActive; // hidden, internal switch controlling if the system is working or not
+    private Quaternion _defaultRotation; //  used for resetting Day and Night Cycle in options to the midday
 
-    void Awake()
+    private void Awake()
     {
         if (Instance == null) {
             Instance = this;
         } else {
             Destroy(gameObject);
         }
-        Sun = GameObject.Find("Sun").GetComponent<Light>();
-        Moon = GameObject.FindGameObjectWithTag("Moon").GetComponent<Light>();
-        anglePerSecond = 180f / dayCycleDuration;
 
-        lanterns = new List<MeshRenderer>();
-        lanternsLights = new List<Light>();
-        brightLanterns = new List<int>();
-        windows = new List<MeshRenderer>();
-        brightWindows = new List<int>();
+        _seconds = dayCycleDuration * 0.5f; // hardcoded starting at the noon
+        
+        _defaultRotation = transform.rotation;
+        
+        _anglePerSecond = 180f / dayCycleDuration;
+        
+        _brightLanterns = new List<int>();
+        _brightWindows = new List<int>();
 
-        brightWindowsChance = brightWindowsRatio / 100;
-        brightLanternsChance = brightLanternsRatio / 100;
+        _brightWindowsChance = brightWindowsRatio / 100;
+        _brightLanternsChance = brightLanternsRatio / 100;
     }
 
     private void Start()
     {
         FindAllWindows();
         FindAllLanterns();
-        if (dayAndNightCycye)
-        {
-            reallyActive = true; // here we start the cycle for real
-        }
     }
 
-    public void Enable()
+    private void FindAllWindows()
     {
-        this.enabled = true;
+        _windows = GameObject.FindGameObjectsWithTag("Window").Select(t => t.GetComponent<MeshRenderer>()).ToArray();
+        //_windows = tempWindows.Select(window => window.GetComponent<MeshRenderer>()).ToArray();
+        _haunted = GameObject.FindGameObjectsWithTag("Haunted").Select(t => t.GetComponent<MeshRenderer>()).ToArray();
+        
+        Debug.Log("Total windows on the Map:" + _windows.Length);
     }
 
-    void FindAllWindows()
-    {
-        GameObject[] tempWindows = GameObject.FindGameObjectsWithTag("Window");
-        foreach (GameObject window in tempWindows)
-        {
-            windows.Add(window.GetComponent<MeshRenderer>());
-        }
-        Debug.Log("Total windows on the Map:" + windows.Count);
-    }
-
-    void FindAllLanterns()
+    private void FindAllLanterns()
     {
         GameObject[] tempLanterns = GameObject.FindGameObjectsWithTag("Lantern");
-        foreach (GameObject lantern in tempLanterns)
-        {
-            lanternsLights.Add(lantern.GetComponent<Light>());
-            lanterns.Add(lantern.GetComponent<MeshRenderer>());
-        }
+        _lanternsLights = tempLanterns.Select(t => t.GetComponent<Light>()).ToArray();
+        _lanterns = tempLanterns.Select(t => t.GetComponent<MeshRenderer>()).ToArray();
     }
 
-    void Update()
+    public void ToggleDayAndNightCycle()
     {
-        if (reallyActive)
+        dayAndNightCycle = !dayAndNightCycle;
+        transform.rotation = _defaultRotation;
+        _seconds = dayCycleDuration * 0.5f;
+        dayCycle = DayCycle.Day;
+        SwitchLights();
+    }
+    
+    private void Update()
+    {
+        _seconds += Time.deltaTime;
+
+        if (dayAndNightCycle)
         {
-            // Day-night cycle is made by rotating a simple system of two light-sources: Sun and Moon around pivot, which is this gameObject.
-            // The simpliest way to do this is rotating the gameObject with it's children - Sun and Moon, simulating planet rotation.
-            transform.Rotate(0f, 0f, anglePerSecond * Time.deltaTime);
-
-            seconds += Time.deltaTime;
-
-            hours = (int)seconds;
-
-            if (seconds > dayCycleDuration)
+            // Day-night cycle is made by rotating a simple system of two light-sources: Sun and Moon around pivot,
+            // which is this gameObject. The simpliest way to do this is rotating the gameObject with it's children -
+            // Sun and Moon, simulating planet rotation.
+            transform.Rotate(0f, 0f, _anglePerSecond * Time.deltaTime);
+            
+            if (_seconds > dayCycleDuration)
             {
-                seconds = 0;
+                _seconds = 0;
+                
                 ChangeDayCycle();
 
                 SwitchLights();
@@ -130,48 +127,50 @@ public class DayAndNightCycle : ScheduledScript
         }
     }
 
-    void ChangeDayCycle()
+    private void ChangeDayCycle()
     {
-        if (dayCycle == DayCycle.Day) {
-            dayCycle = DayCycle.Night;
-        } else {
-            dayCycle = DayCycle.Day;
-        }
+        dayCycle = dayCycle == DayCycle.Day ? DayCycle.Night : DayCycle.Day;
     }
 
-    void SwitchLights()
+    private void SwitchLights()
     {
         if (dayCycle == DayCycle.Night) {
-            for (int i = 0; i < windows.Count; i++) {
-                if (Random.value <= brightWindowsChance) {
-                    windows[i].material = lightInTheWindows;
-                    brightWindows.Add(i); // store index of enlightened windows to switch them off when days comes back
+            for (int i = 0; i < _windows.Length; i++) {
+                if (Random.value <= _brightWindowsChance) {
+                    _windows[i].sharedMaterial = lightInTheWindows;
+                    _brightWindows.Add(i); // store index of enlightened windows to switch them off when days comes back
                 }
             }
 
-            for (int i = 0; i < lanterns.Count; i++) {
-                if (Random.value <= brightLanternsChance) {
-                    lanterns[i].material = lightInTheWindows;
-                    lanternsLights[i].enabled = true;
-                    brightLanterns.Add(i);
+            for (int i = 0; i < _lanterns.Length; i++) {
+                if (Random.value <= _brightLanternsChance) {
+                    _lanterns[i].sharedMaterial = lightInTheWindows;
+                    _lanternsLights[i].enabled = true;
+                    _brightLanterns.Add(i);
                 }
             }
+
+            for (int i = 0; i < _haunted.Length; i++)
+            {
+                _haunted[i].sharedMaterial = hauntedGlow;
+            }
+            
         } else {
-            foreach (int windowsIndex in brightWindows) {
-                windows[windowsIndex].material = darknessInTheWindows;
+            foreach (int windowsIndex in _brightWindows) {
+                _windows[windowsIndex].sharedMaterial = darknessInTheWindows;
             }
-            brightWindows.Clear();  // since all windows are dark again
+            _brightWindows.Clear();  // since all windows are dark again
 
-            foreach (int lanternIndex in brightLanterns) {
-                lanterns[lanternIndex].material = lanternGlass;
-                lanternsLights[lanternIndex].enabled = false;
+            foreach (int lanternIndex in _brightLanterns) {
+                _lanterns[lanternIndex].sharedMaterial = lanternGlass;
+                _lanternsLights[lanternIndex].enabled = false;
             }
-            brightLanterns.Clear();
+            _brightLanterns.Clear();
+
+            foreach (MeshRenderer glow in _haunted)
+            {
+                glow.sharedMaterial = darknessInTheWindows;
+            }
         }
-    }
-
-    public bool CheckIfTimePassed(int requestedHours, int lastUpdate)
-    {
-        return seconds - hours < epsilon && (hours - lastUpdate) == requestedHours;
     }
 }

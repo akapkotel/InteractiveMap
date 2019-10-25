@@ -1,35 +1,48 @@
-﻿using UnityEngine;
+﻿using System.Linq;
+using UnityEngine;
 
-public class RotatorsSystem : MonoBehaviour
+public class RotatorsSystem : ScheduledScript
 {
-    private RotatorScript[] rotators;
-    private Camera cam;
+    public bool rotate = true;
+    
+    private RotatorScript[] _rotators;
+    private Renderer[] _renderers;
+    private Camera _cam;
 
     // Start is called before the first frame update
-    void Start()
+    private void Start()
     {
-        cam = Camera.main;
-        rotators = FindObjectsOfType<RotatorScript>();
-        Debug.Log("RotatorScript instances found:"+rotators.Length);  
+        _cam = Camera.main;
+        
+        _rotators = FindObjectsOfType<RotatorScript>();
+        _renderers = _rotators.Select(t => t.GetComponent<Renderer>()).ToArray();
+        
+        Debug.Log("RotatorScript instances found:"+_rotators.Length);  
     }
 
-    // Update is called once per frame
-    void Update()
+    public void ToggleRotation()
     {
-        foreach (RotatorScript rotator in rotators)
-        { 
-            if (rotator.isRotating && Vector3.Distance(rotator.transform.position, cam.transform.position) < 500f)
+        rotate = !rotate;
+    }
+    
+    // Update is called once per frame
+    private void Update()
+    {
+        if (!rotate || DayAndNightCycle.Instance.dayCycle == DayAndNightCycle.DayCycle.Night) return;
+        
+        for (int i = 0; i < _rotators.Length; i++)
+        {
+            RotatorScript rotator = _rotators[i];
+            if (!rotator.isRotating || !(_renderers[i].isVisible)) continue;
+            for (int j = 0; j < rotator.rotatingObjects.Length; j++)
             {
-                for (int j = 0; j < rotator.rotatingObjects.Length; j++)
+                if (rotator.direction == MapScript.RotationDirection.Counterclockwise)
                 {
-                    if (rotator.direction == MapScript.RotationDirection.Counterclockwise)
-                    {
-                        rotator.rotatingObjects[j].transform.Rotate(0f, 0f, rotator.rotationSpeed);
-                    }
-                    else
-                    {
-                        rotator.rotatingObjects[j].transform.Rotate(0f, 0f, -rotator.rotationSpeed);
-                    }
+                    rotator.rotatingObjects[j].transform.Rotate(0f, 0f, rotator.rotationSpeed);
+                }
+                else
+                {
+                    rotator.rotatingObjects[j].transform.Rotate(0f, 0f, -rotator.rotationSpeed);
                 }
             }
         }
